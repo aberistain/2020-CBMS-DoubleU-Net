@@ -14,8 +14,11 @@ from train import tf_dataset
 from utils import *
 
 
-def read_image(x):
+def read_image(x, resize=None):
     image = cv2.imread(x, cv2.IMREAD_COLOR)
+    if resize:
+        # resize (width, height)
+        image = cv2.resize(image, resize, interpolation=cv2.INTER_AREA)
     image = np.clip(image - np.median(image) + 127, 0, 255)
     image = image / 255.0
     image = image.astype(np.float32)
@@ -23,8 +26,11 @@ def read_image(x):
     return image
 
 
-def read_mask(y):
+def read_mask(y, resize=None):
     mask = cv2.imread(y, cv2.IMREAD_GRAYSCALE)
+    if resize:
+        # resize (width, height)
+        mask = cv2.resize(mask, resize, interpolation=cv2.INTER_AREA)
     mask = mask.astype(np.float32)
     mask = mask / 255.0
     mask = np.expand_dims(mask, axis=-1)
@@ -46,12 +52,12 @@ def parse(y_pred):
     return y_pred
 
 
-def evaluate_normal(model, x_data, y_data):
+def evaluate_normal(model, x_data, y_data, model_image_size=None):
     THRESHOLD = 0.5
     total = []
     for i, (x, y) in tqdm(enumerate(zip(x_data, y_data)), total=len(x_data)):
-        x = read_image(x)
-        y = read_mask(y)
+        x = read_image(x, resize=model_image_size)
+        y = read_mask(y, resize=model_image_size)
         _, h, w, _ = x.shape
 
         y_pred1 = parse(model.predict(x)[0][..., -2])
@@ -104,4 +110,4 @@ if __name__ == "__main__":
 
     model = load_model_weight(model_path)
     model.evaluate(test_dataset, steps=test_steps)
-    evaluate_normal(model, test_x, test_y)
+    evaluate_normal(model, test_x, test_y, model_image_size=(512, 384))

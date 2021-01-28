@@ -6,18 +6,24 @@ from metrics import *
 from utils import *
 
 
-def read_image(x):
+def read_image(x, resize=None):
     x = x.decode()
     image = cv2.imread(x, cv2.IMREAD_COLOR)
+    if resize is not None:
+        # resize (width, height)
+        image = cv2.resize(image, resize, interpolation=cv2.INTER_AREA)
     image = np.clip(image - np.median(image) + 127, 0, 255)
     image = image / 255.0
     image = image.astype(np.float32)
     return image
 
 
-def read_mask(y):
+def read_mask(y, resize=None):
     y = y.decode()
     mask = cv2.imread(y, cv2.IMREAD_GRAYSCALE)
+    if resize is not None:
+        # resize (width, height)
+        mask = cv2.resize(mask, resize, interpolation=cv2.INTER_AREA)
     mask = mask / 255.0
     mask = mask.astype(np.float32)
     mask = np.expand_dims(mask, axis=-1)
@@ -26,8 +32,8 @@ def read_mask(y):
 
 def parse_data(x, y):
     def _parse(x, y):
-        x = read_image(x)
-        y = read_mask(y)
+        x = read_image(x, resize=(512, 384))
+        y = read_mask(y, resize=(512, 384))
         y = np.concatenate([y, y], axis=-1)
         return x, y
 

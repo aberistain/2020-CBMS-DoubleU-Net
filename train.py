@@ -1,32 +1,28 @@
-
-import os
-import numpy as np
-import cv2
-import tensorflow as tf
 from tensorflow.keras.callbacks import *
-from tensorflow.keras.optimizers import Adam, Nadam
 from tensorflow.keras.metrics import *
-from glob import glob
-from sklearn.model_selection import train_test_split
-from model import build_model
-from utils import *
+from tensorflow.keras.optimizers import Adam
+
 from metrics import *
+from utils import *
+
 
 def read_image(x):
     x = x.decode()
     image = cv2.imread(x, cv2.IMREAD_COLOR)
-    image = np.clip(image - np.median(image)+127, 0, 255)
-    image = image/255.0
+    image = np.clip(image - np.median(image) + 127, 0, 255)
+    image = image / 255.0
     image = image.astype(np.float32)
     return image
+
 
 def read_mask(y):
     y = y.decode()
     mask = cv2.imread(y, cv2.IMREAD_GRAYSCALE)
-    mask = mask/255.0
+    mask = mask / 255.0
     mask = mask.astype(np.float32)
     mask = np.expand_dims(mask, axis=-1)
     return mask
+
 
 def parse_data(x, y):
     def _parse(x, y):
@@ -40,6 +36,7 @@ def parse_data(x, y):
     y.set_shape([384, 512, 2])
     return x, y
 
+
 def tf_dataset(x, y, batch=8):
     dataset = tf.data.Dataset.from_tensor_slices((x, y))
     dataset = dataset.shuffle(buffer_size=32)
@@ -47,6 +44,7 @@ def tf_dataset(x, y, batch=8):
     dataset = dataset.repeat()
     dataset = dataset.batch(batch)
     return dataset
+
 
 if __name__ == "__main__":
     np.random.seed(42)
@@ -80,10 +78,10 @@ if __name__ == "__main__":
         Recall(),
         Precision()
     ]
-    
+
     train_dataset = tf_dataset(train_x, train_y, batch=batch_size)
     valid_dataset = tf_dataset(valid_x, valid_y, batch=batch_size)
-    
+
     model.compile(loss=dice_loss, optimizer=Adam(lr), metrics=metrics)
 
     callbacks = [
@@ -94,8 +92,8 @@ if __name__ == "__main__":
         EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=False)
     ]
 
-    train_steps = (len(train_x)//batch_size)
-    valid_steps = (len(valid_x)//batch_size)
+    train_steps = (len(train_x) // batch_size)
+    valid_steps = (len(valid_x) // batch_size)
 
     if len(train_x) % batch_size != 0:
         train_steps += 1
@@ -104,9 +102,9 @@ if __name__ == "__main__":
         valid_steps += 1
 
     model.fit(train_dataset,
-            epochs=epochs,
-            validation_data=valid_dataset,
-            steps_per_epoch=train_steps,
-            validation_steps=valid_steps,
-            callbacks=callbacks,
-            shuffle=False)
+              epochs=epochs,
+              validation_data=valid_dataset,
+              steps_per_epoch=train_steps,
+              validation_steps=valid_steps,
+              callbacks=callbacks,
+              shuffle=False)

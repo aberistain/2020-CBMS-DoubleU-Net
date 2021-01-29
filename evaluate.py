@@ -68,8 +68,7 @@ def evaluate_normal(model, x_data, y_data, model_image_size=None):
         all_images = [
             x[0] * 255.0, line,
             mask_to_3d(y) * 255.0, line,
-            mask_to_3d(y_pred1) * 255.0, line,
-            mask_to_3d(y_pred2) * 255.0
+            mask_to_3d(y_pred1) * 255.0
         ]
         mask = np.concatenate(all_images, axis=1)
 
@@ -95,7 +94,7 @@ if __name__ == "__main__":
     tf.random.set_seed(42)
     create_dir("results/")
 
-    batch_size = 2
+    batch_size = 5
 
     test_path = str(Path(__file__).parent.joinpath('dataset', 'ISIC_2018'))
     model_path = str(Path(__file__).parent.joinpath('files', 'model.h5'))

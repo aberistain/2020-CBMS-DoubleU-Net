@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from evaluate import mask_to_3d, parse
+from evaluate import mask_to_1d, parse
 from utils import create_dir, load_model_weight
 
 
@@ -40,8 +40,35 @@ class Inference(ABC):
     def infer_image_file_path(self, image_file_path, resize=None):
         image, img_original_shape = self._read_image(x=image_file_path, resize=resize)
         out_image = self._infer_image(image)
-        return cv2.resize(mask_to_3d(out_image) * 255.0, img_original_shape, interpolation=cv2.INTER_AREA),\
+        return cv2.resize((mask_to_1d(out_image) * 255.0).astype(np.uint8), img_original_shape,
+                          interpolation=cv2.INTER_AREA),\
                img_original_shape
+
+    def yield_detected_lesions(self, image_file_path, resize=None, padding=4, size_threshold=0.0):
+        segmented_image, original_shape = self.infer_image_file_path(image_file_path=image_file_path, resize=resize)
+        min_area = original_shape[0] * original_shape[1] * size_threshold
+        for x, y, w, h in self._yield_roi_crops(segmented_image):
+            if w * h > min_area:
+                yield (x, y, w, h), self._crop_image_with_padding(image=segmented_image,
+                                                                  cv_rect=(x, y, w, h), padding=padding)
+
+    @staticmethod
+    def _yield_roi_crops(binary_image):
+        contours, hierarchy = cv2.findContours(image=binary_image, mode=cv2.RETR_EXTERNAL,
+                                               method=cv2.CHAIN_APPROX_SIMPLE,
+                                               contours=None, hierarchy=None, offset=None)
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            yield x, y, w, h
+
+    @staticmethod
+    def _crop_image_with_padding(image, cv_rect, padding=0):
+        x, y, w, h = cv_rect
+        y_min = max(y - padding, 0)
+        y_max = min(y + h + padding, image.shape[0])
+        x_min = max(x - padding, 0)
+        x_max = min(x + w + padding, image.shape[1])
+        return image[y_min:y_max, x_min:x_max]
 
 
 class InferenceFullModel(Inference):
@@ -75,10 +102,15 @@ class InferenceTFLite(Inference):
         # Use `tensor()` in order to get a pointer to the tensor.
         return self.model.get_tensor(output_details[0]['index'])[0][..., -2]
 
+
 def process_images(model, image_path_list, out_path, model_image_size=None):
     for i, im_path in tqdm(enumerate(image_path_list), total=len(image_path_list)):
-        out_image, img_original_shape = model.infer_image_file_path(im_path, resize=model_image_size)
+        out_image, original_shape = model.infer_image_file_path(image_file_path=im_path, resize=model_image_size)
         cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}.png')), out_image)
+        # for index, out_val in enumerate(model.yield_detected_lesions(im_path, resize=model_image_size)):
+        #     x, y, w, h = out_val[0]
+        #     out_image = out_val[1]
+        #     cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}_{index}.png')), out_image)
 
 
 def get_image_path_list_from_file(file_path: Path):
@@ -100,10 +132,18 @@ def generate_image_file_list(file_path: Path):
                 f.write(f'{currentFile}')
 
 
+def yield_roi_crops(binary_image):
+    for contour in cv2.findContours(image=binary_image, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE,
+                                contours=None, hierarchy=None, offset=None):
+        yield cv2.boundingRect(contour)
+
+
 def convert_model_to_tf_lite(model_path=str(Path(__file__).parent.joinpath('files', 'model.h5')),
                              output_model_path='model.tflite'):
+    # https://www.tensorflow.org/lite/guide/get_started#4_optimize_your_model_optional
     model = load_model_weight(model_path)
     converter = tf.lite.TFLiteConverter.from_keras_model(model=model)
+    # converter.optimizations = [tf.lite.Optimize.DEFAULT]
     tflite_model = converter.convert()
     # Save the model.
     with open(output_model_path, 'wb') as f:
@@ -111,28 +151,29 @@ def convert_model_to_tf_lite(model_path=str(Path(__file__).parent.joinpath('file
 
 
 def main():
-    # parser = argparse.ArgumentParser(
-    #     description="Lesion segmentation from paper:"
-    #                 "@INPROCEEDINGS{9183321, "
-    #                 "author={D. {Jha} and M. A. {Riegler} and D. {Johansen} and P. {Halvorsen} and H. D. {Johansen}}, "
-    #                 "booktitle={2020 IEEE 33rd International Symposium on Computer-Based Medical Systems (CBMS)}, "
-    #                 "title={DoubleU-Net: A Deep Convolutional Neural Network for Medical Image Segmentation}, "
-    #                 "year={2020},"
-    #                 "pages={558-564}}")
-    #
-    # # Required positional argument
-    # parser.add_argument('input_file', type=str,
-    #                     help='Path to txt file containing one image file path per line')
+    parser = argparse.ArgumentParser(
+        description="Lesion segmentation from paper:"
+                    "@INPROCEEDINGS{9183321, "
+                    "author={D. {Jha} and M. A. {Riegler} and D. {Johansen} and P. {Halvorsen} and H. D. {Johansen}}, "
+                    "booktitle={2020 IEEE 33rd International Symposium on Computer-Based Medical Systems (CBMS)}, "
+                    "title={DoubleU-Net: A Deep Convolutional Neural Network for Medical Image Segmentation}, "
+                    "year={2020},"
+                    "pages={558-564}}")
+
+    # Required positional argument
+    parser.add_argument('input_file', type=str,
+                        help='Path to txt file containing one image file path per line')
 
     out_path = str(Path(__file__).parent.joinpath('results'))
     create_dir(out_path)
 
-    test_path = str(Path(__file__).parent.joinpath('dataset', 'ISIC_2018'))
+    # test_path = str(Path(__file__).parent.joinpath('dataset', 'ISIC_2018'))
+    test_path = str(Path(__file__).parent.joinpath('dataset', 'janu'))
     model_path = str(Path(__file__).parent.joinpath('files', 'model.h5'))
     model_path_tf_lite = str(Path(__file__).parent.joinpath('files', 'model.tflite'))
 
     test_x = sorted(glob(str(Path(test_path, "image", "*.jpg"))))
-    infering_model = InferenceTFLite(model_path=model_path_tf_lite)
+    infering_model = InferenceFullModel(model_path=model_path)
     process_images(model=infering_model, image_path_list=test_x, out_path=out_path, model_image_size=(512, 384))
 
 

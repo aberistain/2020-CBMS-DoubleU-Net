@@ -44,6 +44,11 @@ def mask_to_3d(mask):
     return mask
 
 
+def mask_to_1d(mask):
+    mask = np.squeeze(mask)
+    return mask
+
+
 def parse(y_pred):
     y_pred = np.expand_dims(y_pred, axis=-1)
     y_pred = y_pred[..., -1]

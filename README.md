@@ -65,6 +65,15 @@ Please cite our paper if you find the work useful:
   pages={558-564}}
 </pre>
 
+## use_trained_model_for_prediction.py (by aberistain)
+
+* input_path: Path to folder containing jpg image files
+* output_path: Path to folder to store output binary segmentation images. Single channel png files
+* -t: Flag. If true and tflite model available, it is used instead of full model
+* -c: Flag. If true instead of providing a single output image per input image, one image per detected lesion is produced as a png image with "input_image_name"_{index}.png
+
+`use_trained_model_for_prediction.py input_path output_path -t -c`
+
 ## Contact
 please contact debesh@simula.no for any further questions. 
 

@@ -103,14 +103,18 @@ class InferenceTFLite(Inference):
         return self.model.get_tensor(output_details[0]['index'])[0][..., -2]
 
 
-def process_images(model, image_path_list, out_path, model_image_size=None):
+def process_images(model, image_path_list, out_path, yield_crops=False, model_image_size=None,
+                   region_size_threshold=0.01):
     for i, im_path in tqdm(enumerate(image_path_list), total=len(image_path_list)):
-        out_image, original_shape = model.infer_image_file_path(image_file_path=im_path, resize=model_image_size)
-        cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}.png')), out_image)
-        # for index, out_val in enumerate(model.yield_detected_lesions(im_path, resize=model_image_size)):
-        #     x, y, w, h = out_val[0]
-        #     out_image = out_val[1]
-        #     cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}_{index}.png')), out_image)
+        if not yield_crops:
+            out_image, original_shape = model.infer_image_file_path(image_file_path=im_path, resize=model_image_size)
+            cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}.png')), out_image)
+        else:
+            for index, out_val in enumerate(model.yield_detected_lesions(im_path, resize=model_image_size,
+                                                                         size_threshold=region_size_threshold)):
+                x, y, w, h = out_val[0]
+                out_image = out_val[1]
+                cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}_{index}.png')), out_image)
 
 
 def get_image_path_list_from_file(file_path: Path):
@@ -152,6 +156,8 @@ def convert_model_to_tf_lite(model_path=str(Path(__file__).parent.joinpath('file
 
 def main():
     parser = argparse.ArgumentParser(
+        prog='main',
+        usage='%(prog)s path_input_images path_output',
         description="Lesion segmentation from paper:"
                     "@INPROCEEDINGS{9183321, "
                     "author={D. {Jha} and M. A. {Riegler} and D. {Johansen} and P. {Halvorsen} and H. D. {Johansen}}, "
@@ -161,20 +167,43 @@ def main():
                     "pages={558-564}}")
 
     # Required positional argument
-    parser.add_argument('input_file', type=str,
-                        help='Path to txt file containing one image file path per line')
+    parser.add_argument('path_input_images', type=str,
+                        help='Path to folder containing input images. They must be .jpg')
+
+    parser.add_argument('path_output', type=str,
+                        help='Path to folder containing input images')
+
+    parser.add_argument('-c', '--crops', action='store_true', help='Get cropped regions, one per region')
+
+    parser.add_argument('-t', '--tf_lite', action='store_true', help='Use TFlite model')
+
+    args = parser.parse_args()
+    in_path = Path(args.path_input_images)
+    out_path = Path(args.path_output)
+    if not in_path.is_dir():
+        print(f'Invalid path_input_images {args.path_input_images}')
+        return -1
+    create_dir(args.path_output)
+    if not out_path.is_dir():
+        print(f'Invalid path_output {args.path_output}')
+        return -1
 
     out_path = str(Path(__file__).parent.joinpath('results'))
     create_dir(out_path)
+    test_x = sorted(glob(str(Path(in_path, "*.jpg"))))
 
-    # test_path = str(Path(__file__).parent.joinpath('dataset', 'ISIC_2018'))
-    test_path = str(Path(__file__).parent.joinpath('dataset', 'janu'))
-    model_path = str(Path(__file__).parent.joinpath('files', 'model.h5'))
-    model_path_tf_lite = str(Path(__file__).parent.joinpath('files', 'model.tflite'))
+    if args.tf_lite:
+        model_path_tf_lite = str(Path(__file__).parent.joinpath('files', 'model.tflite'))
+        model = InferenceTFLite(model_path=model_path_tf_lite)
+    else:
+        model_path = str(Path(__file__).parent.joinpath('files', 'model.h5'))
+        model = InferenceFullModel(model_path=model_path)
 
-    test_x = sorted(glob(str(Path(test_path, "image", "*.jpg"))))
-    infering_model = InferenceFullModel(model_path=model_path)
-    process_images(model=infering_model, image_path_list=test_x, out_path=out_path, model_image_size=(512, 384))
+    process_images(model=model, image_path_list=test_x,
+                   out_path=str(out_path),
+                   yield_crops=args.crops,
+                   model_image_size=(512, 384),
+                   region_size_threshold=0.01)
 
 
 if __name__ == "__main__":

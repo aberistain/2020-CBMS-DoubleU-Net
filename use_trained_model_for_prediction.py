@@ -8,8 +8,9 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from evaluate import mask_to_1d, parse
 from utils import create_dir, load_model_weight
+
+DEBUG_MODE = False
 
 
 class Inference(ABC):
@@ -37,10 +38,15 @@ class Inference(ABC):
         image = np.expand_dims(image, axis=0)
         return image, original_size
 
+    @staticmethod
+    def mask_to_1d(mask):
+        mask = np.squeeze(mask)
+        return mask
+
     def infer_image_file_path(self, image_file_path, resize=None):
         image, img_original_shape = self._read_image(x=image_file_path, resize=resize)
         out_image = self._infer_image(image)
-        return cv2.resize((mask_to_1d(out_image) * 255.0).astype(np.uint8), img_original_shape,
+        return cv2.resize((self.mask_to_1d(out_image) * 255.0).astype(np.uint8), img_original_shape,
                           interpolation=cv2.INTER_AREA),\
                img_original_shape
 
@@ -78,8 +84,16 @@ class InferenceFullModel(Inference):
     def _load_model(self, model_path):
         return load_model_weight(model_path)
 
+    @staticmethod
+    def parse(y_pred):
+        y_pred = np.expand_dims(y_pred, axis=-1)
+        y_pred = y_pred[..., -1]
+        y_pred = y_pred.astype(np.float32)
+        y_pred = np.expand_dims(y_pred, axis=-1)
+        return y_pred
+
     def _infer_image(self, image):
-        return parse(self.model.predict(image)[0][..., -2])
+        return self.parse(self.model.predict(image)[0][..., -2])
 
 
 class InferenceTFLite(Inference):
@@ -105,16 +119,30 @@ class InferenceTFLite(Inference):
 
 def process_images(model, image_path_list, out_path, yield_crops=False, model_image_size=None,
                    region_size_threshold=0.01):
-    for i, im_path in tqdm(enumerate(image_path_list), total=len(image_path_list)):
+    global DEBUG_MODE
+    tqdm_iterator = tqdm(enumerate(image_path_list), total=len(image_path_list))
+    for i, im_path in tqdm_iterator:
+        if DEBUG_MODE:
+            tqdm_iterator.set_description(f"Processing {im_path} to store result in "
+                                          f"{Path(out_path, f'{Path(im_path).stem}.png')}")
         if not yield_crops:
             out_image, original_shape = model.infer_image_file_path(image_file_path=im_path, resize=model_image_size)
-            cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}.png')), out_image)
+            out_path_image = str(Path(out_path, f'{Path(im_path).stem}.png'))
+            properly_stored = cv2.imwrite(out_path_image, out_image)
+            if DEBUG_MODE:
+                p_stored_str = 'Properly' if properly_stored else 'Not'
+                print(f'{p_stored_str} stored output as {out_path_image}')
         else:
             for index, out_val in enumerate(model.yield_detected_lesions(im_path, resize=model_image_size,
                                                                          size_threshold=region_size_threshold)):
                 x, y, w, h = out_val[0]
                 out_image = out_val[1]
-                cv2.imwrite(str(Path(out_path, f'{Path(im_path).stem}_{index}.png')), out_image)
+                out_path_image = str(Path(out_path, f'{Path(im_path).stem}_{index}.png'))
+                properly_stored = cv2.imwrite(out_path_image, out_image)
+                if DEBUG_MODE:
+                    p_stored_str = 'Properly' if properly_stored else 'Not'
+                    print(f'{p_stored_str} stored output as {out_path_image}')
+
 
 
 def get_image_path_list_from_file(file_path: Path):
@@ -188,15 +216,13 @@ def main():
         print(f'Invalid path_output {args.path_output}')
         return -1
 
-    out_path = str(Path(__file__).parent.joinpath('results'))
-    create_dir(out_path)
     test_x = sorted(glob(str(Path(in_path, "*.jpg"))))
 
     if args.tf_lite:
-        model_path_tf_lite = str(Path(__file__).parent.joinpath('files', 'model.tflite'))
+        model_path_tf_lite = str(Path('files', 'model.tflite'))
         model = InferenceTFLite(model_path=model_path_tf_lite)
     else:
-        model_path = str(Path(__file__).parent.joinpath('files', 'model.h5'))
+        model_path = str(Path('files', 'model.h5'))
         model = InferenceFullModel(model_path=model_path)
 
     process_images(model=model, image_path_list=test_x,

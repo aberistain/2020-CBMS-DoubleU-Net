@@ -74,6 +74,11 @@ Please cite our paper if you find the work useful:
 
 `use_trained_model_for_prediction.py input_path output_path -t -c`
 
+### Docker run
+
+`docker build -t cvpr_segmentation .` 
+`docker run -v [output_folder]:/input-dataset:ro -v [output_folder]:/output-folder cvpr_segmentation`
+
 ## Contact
 please contact debesh@simula.no for any further questions. 
 

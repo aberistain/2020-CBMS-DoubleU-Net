@@ -76,8 +76,10 @@ Please cite our paper if you find the work useful:
 
 ### Docker run
 **Note: Docker files are optimized for CPU based execution. Modify FROM to use gpu tensorflow and also requirements.txt to use GPU**
+
 `docker build -t cvpr_segmentation .` 
-`docker run -v [output_folder]:/input-dataset:ro -v [output_folder]:/output-folder cvpr_segmentation`
+
+`docker run -v [input_image_folder]:/input-dataset:ro -v [output_folder]:/output-folder cvpr_segmentation`
 
 ## Contact
 please contact debesh@simula.no for any further questions. 

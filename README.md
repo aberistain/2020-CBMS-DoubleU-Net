@@ -75,7 +75,7 @@ Please cite our paper if you find the work useful:
 `use_trained_model_for_prediction.py input_path output_path -t -c`
 
 ### Docker run
-
+**Note: Docker files are optimized for CPU based execution. Modify FROM to use gpu tensorflow and also requirements.txt to use GPU**
 `docker build -t cvpr_segmentation .` 
 `docker run -v [output_folder]:/input-dataset:ro -v [output_folder]:/output-folder cvpr_segmentation`
 

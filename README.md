@@ -79,7 +79,7 @@ Please cite our paper if you find the work useful:
 
 `docker build -t cvpr_segmentation:cvpr .` 
 
-`docker run -d --rm --name cvpr_segmentation_runner -v [input_image_folder]:/input-dataset:ro -v [output_folder]:/output-folder cvpr_segmentation -v [source_code_path]:/opt:ro`
+`docker run -d --rm --name cvpr_segmentation_runner -v [input_image_folder]:/input-dataset:ro -v [output_folder]:/output-folder -v [source_code_path]:/opt:ro cvpr_segmentation:cvpr`
 
 ## Contact
 please contact debesh@simula.no for any further questions. 

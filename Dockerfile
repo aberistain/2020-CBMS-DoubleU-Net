@@ -1,7 +1,8 @@
 FROM tensorflow/tensorflow
 
 WORKDIR /opt
-COPY . /opt
+# COPY . /opt
+COPY requirements.txt /opt
 
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 RUN python -m pip install --upgrade pip && pip install -r requirements.txt
